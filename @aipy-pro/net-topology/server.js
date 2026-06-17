@@ -45,6 +45,7 @@ app.get("/api/topology/:scanId", (req, res) => {
 });
 
 app.use("/ui", express.static("src/ui"));
+app.get("/", (req, res) => res.redirect("/ui/index.html"));
 
 const server = new McpServer({
   name: "@aipy-pro/net-topology",

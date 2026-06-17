@@ -15,5 +15,5 @@
             "env": {}
         }
     },
-    "keywords": ["conversation-tool"]
+    "keywords": ["conversation-tool", "embed-webview"]
 }
