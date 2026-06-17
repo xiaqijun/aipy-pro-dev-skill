@@ -67,7 +67,8 @@ const transport = new StreamableHTTPServerTransport({
   sessionIdGenerator: undefined,
 });
 await server.connect(transport);
-app.post("/mcp", async (req, res) => {
+// MCP Streamable HTTP: handle GET (session init) + POST (messages) + DELETE (session close)
+app.all("/mcp", async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
