@@ -1,8 +1,9 @@
 import express from "express";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { registerTools, setServerPort } from "./src/mcp/tools.js";
-import { registerPrompts } from "./src/mcp/prompts.js";
+import { discoverSubnets } from "./src/scanner/subnet-discovery.js";
+import { discoverHosts } from "./src/scanner/host-discovery.js";
+import { scanHost } from "./src/scanner/port-scanner.js";
+import { traceRoute } from "./src/scanner/traceroute.js";
+import { buildTopology } from "./src/analyzer/topology-builder.js";
 import { CredentialManager, Blacklist } from "./src/security.js";
 
 const app = express();
@@ -13,37 +14,103 @@ const credentialManager = new CredentialManager();
 const blacklist = new Blacklist();
 credentialManager.addSnmpV2("public");
 credentialManager.addSnmpV2("private");
-const getScanState = (id) => scanStates.get(id);
-const setScanState = (state) => {
+
+function setScanState(state) {
   scanStates.set(state.scanId, state);
-  // Auto-evict after 30 minutes
   setTimeout(() => {
     const s = scanStates.get(state.scanId);
-    if (s && (s.status === "done" || s.status === "cancelled")) {
-      scanStates.delete(state.scanId);
-    }
+    if (s && (s.status === "done" || s.status === "cancelled")) scanStates.delete(state.scanId);
   }, 30 * 60 * 1000);
-};
+}
 
-app.get("/api/progress/:scanId", (req, res) => {
+// --- REST API ---
+
+// Start a full scan
+app.post("/api/scan/start", async (req, res) => {
+  const { startSubnet } = req.body || {};
+  const scanId = `scan_${Date.now()}`;
+  const state = {
+    scanId, status: "running", phase: "subnet_detect",
+    phases: [
+      { name: "subnet_detect", total: 1, done: 0, status: "pending" },
+      { name: "host_discovery", total: 0, done: 0, status: "pending" },
+      { name: "port_scan", total: 0, done: 0, status: "pending" },
+      { name: "topology_build", total: 1, done: 0, status: "pending" },
+    ],
+    intermediate: { hostsFound: 0, routersFound: 0, switchesFound: 0, edgesFound: 0 },
+  };
+  setScanState(state);
+  res.json({ scanId });
+
+  // Run scan async
+  try {
+    state.phases[0].status = "running";
+    const subnets = startSubnet
+      ? [{ subnet: startSubnet, source: "user", gateway: null }]
+      : await discoverSubnets({ includeHeuristic: true });
+    state.phases[0].done = 1;
+    state.phases[0].status = "done";
+
+    state.phase = "host_discovery";
+    state.phases[1].total = subnets.length;
+    state.phases[1].status = "running";
+    let allHosts = [];
+    for (let i = 0; i < subnets.length; i++) {
+      if (state._abort) break;
+      const hosts = await discoverHosts(subnets[i].subnet);
+      allHosts = allHosts.concat(hosts.map(h => ({ ...h, subnet: subnets[i].subnet })));
+      state.phases[1].done = i + 1;
+      state.intermediate.hostsFound = allHosts.length;
+    }
+    state.phases[1].status = "done";
+
+    state.phase = "port_scan";
+    const scanTargets = allHosts.slice(0, 50);
+    state.phases[2].total = scanTargets.length;
+    state.phases[2].status = "running";
+    let hostDetails = [];
+    for (let i = 0; i < scanTargets.length; i++) {
+      if (state._abort) break;
+      try { hostDetails.push(await scanHost(scanTargets[i].ip, { portRange: "1-1000" })); } catch {}
+      state.phases[2].done = i + 1;
+    }
+    state.phases[2].status = "done";
+
+    state.phase = "topology_build";
+    state.phases[3].status = "running";
+    const topology = buildTopology({ hosts: allHosts, hostDetails, traces: [] });
+    state.phases[3].done = 1;
+    state.phases[3].status = "done";
+    state.status = "done";
+    state.topology = topology;
+  } catch (e) {
+    state.status = "error";
+    state.error = e.message;
+  }
+});
+
+// Scan progress
+app.get("/api/scan/:scanId/progress", (req, res) => {
   const state = scanStates.get(req.params.scanId);
   if (!state) return res.status(404).json({ error: "scan not found" });
   res.json(state);
 });
 
-app.put("/api/scan/cancel", (req, res) => {
-  const { scanId } = req.body;
-  const state = scanStates.get(scanId);
+// Cancel scan
+app.post("/api/scan/:scanId/cancel", (req, res) => {
+  const state = scanStates.get(req.params.scanId);
   if (state) { state.status = "cancelled"; state._abort = true; }
   res.json({ cancelled: true });
 });
 
+// Topology data
 app.get("/api/topology/:scanId", (req, res) => {
   const state = scanStates.get(req.params.scanId);
   if (!state || !state.topology) return res.status(404).json({ error: "topology not ready" });
   res.json(state.topology);
 });
 
+// Latest completed scan
 app.get("/api/latest-scan", (req, res) => {
   const scans = Array.from(scanStates.values())
     .filter(s => s.status === "done" && s.topology)
@@ -52,44 +119,22 @@ app.get("/api/latest-scan", (req, res) => {
   res.json({ scanId: scans[0].scanId });
 });
 
-const server = new McpServer({
-  name: "@aipy-pro/net-topology",
-  version: "1.0.0",
-});
-
-registerTools(server, { getScanState, setScanState, credentialManager, blacklist });
-registerPrompts(server);
-
-const transport = new StreamableHTTPServerTransport({
-  sessionIdGenerator: undefined,
-});
-await server.connect(transport);
-
-// MCP at /mcp (dedicated endpoint)
-app.get("/mcp", (req, res) => res.status(200).set("Mcp-Session-Id", "stateless").end());
-app.post("/mcp", (req, res) => { transport.handleRequest(req, res, req.body).catch(e => { if (!res.headersSent) res.status(500).json({ error: e.message }); }); });
-app.delete("/mcp", (req, res) => { transport.handleRequest(req, res, req.body).catch(e => { if (!res.headersSent) res.status(500).json({ error: e.message }); }); });
-
-// MCP at root / — AiPy Pro client connects to serverUrl directly
-// Browser GET → index.html; MCP client GET (Accept: application/json) → session init
-app.get("/", (req, res, next) => {
-  const accept = (req.headers["accept"] || "").toLowerCase();
-  if (accept.includes("application/json") || accept.includes("text/event-stream")) {
-    res.status(200).set("Mcp-Session-Id", "stateless").end();
-  } else {
-    next(); // browser → serve index.html
+// Subnet discovery (for UI)
+app.get("/api/subnets", async (req, res) => {
+  try {
+    const subnets = await discoverSubnets({ includeHeuristic: true });
+    res.json(subnets);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
-app.post("/", (req, res) => { transport.handleRequest(req, res, req.body).catch(e => { if (!res.headersSent) res.status(500).json({ error: e.message }); }); });
-app.delete("/", (req, res) => { transport.handleRequest(req, res, req.body).catch(e => { if (!res.headersSent) res.status(500).json({ error: e.message }); }); });
 
-// Static files for webview
+// Static UI
 app.use(express.static("public"));
 app.use("/ui", express.static("src/ui"));
 
 const listener = app.listen(process.env.PORT || 0, "127.0.0.1", () => {
   const port = listener.address().port;
-  setServerPort(port);
-  console.log(`[NetTopology] embed-webview + conversation-tool`);
+  console.log(`[NetTopology] embed-webview`);
   console.log(JSON.stringify({ type: "http_start", port }));
 });

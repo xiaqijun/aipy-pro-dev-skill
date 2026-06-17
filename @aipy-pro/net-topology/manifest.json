@@ -15,6 +15,6 @@
             "env": {}
         }
     },
-    "keywords": ["conversation-tool", "embed-webview"],
+    "keywords": ["embed-webview"],
     "user_config": {}
 }
