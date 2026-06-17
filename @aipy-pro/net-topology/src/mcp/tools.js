@@ -16,7 +16,7 @@ function makeTopologyUrl(scanId) {
   return `http://${withHostPort(host, port)}/ui?scanId=${scanId}`;
 }
 
-export function registerTools(server, { getScanState, setScanState }) {
+export function registerTools(server, { getScanState, setScanState, credentialManager, blacklist }) {
   server.registerTool(
     "discover_subnets",
     {
@@ -156,6 +156,26 @@ export function registerTools(server, { getScanState, setScanState }) {
       }
       state.phases[2].status = "done";
 
+      // Phase 3.5: SNMP discovery on gateway devices
+      const snmpResults = {};
+      const gatewayHosts = allHosts.filter(h => h.isGateway);
+      if (credentialManager && gatewayHosts.length > 0) {
+        for (const gw of gatewayHosts.slice(0, 10)) {
+          if (blacklist && blacklist.isBlocked(gw.ip)) continue;
+          try {
+            const result = await credentialManager.trySnmpCredentials(gw.ip, async (cred) => {
+              const { discoverSwitchPorts, discoverLLDPNeighbors, discoverVLANs } = await import("../scanner/snmp.js");
+              const macTable = await discoverSwitchPorts(gw.ip, cred.community);
+              if (Object.keys(macTable).length === 0) return null;
+              const lldpNeighbors = await discoverLLDPNeighbors(gw.ip, cred.community);
+              const vlans = await discoverVLANs(gw.ip, cred.community);
+              return { macTable, lldpNeighbors, vlans };
+            });
+            if (result) snmpResults[gw.ip] = result;
+          } catch { /* SNMP failed for this gateway */ }
+        }
+      }
+
       state.phase = "topology_build";
       state.phases[3].status = "running";
       let traces = [];
@@ -166,7 +186,7 @@ export function registerTools(server, { getScanState, setScanState }) {
           traces.push({ target: gw, hops });
         } catch { /* skip */ }
       }
-      const topology = buildTopology({ hosts: allHosts, hostDetails, traces });
+      const topology = buildTopology({ hosts: allHosts, hostDetails, traces, snmpResults });
       state.phases[3].done = 1;
       state.phases[3].status = "done";
       state.status = "done";

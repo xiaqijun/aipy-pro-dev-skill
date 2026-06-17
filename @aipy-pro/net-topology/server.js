@@ -3,11 +3,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerTools } from "./src/mcp/tools.js";
 import { registerPrompts } from "./src/mcp/prompts.js";
+import { CredentialManager, Blacklist } from "./src/security.js";
 
 const app = express();
 app.use(express.json());
 
 const scanStates = new Map();
+const credentialManager = new CredentialManager();
+const blacklist = new Blacklist();
+credentialManager.addSnmpV2("public");
+credentialManager.addSnmpV2("private");
 const getScanState = (id) => scanStates.get(id);
 const setScanState = (state) => {
   scanStates.set(state.scanId, state);
@@ -46,7 +51,7 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-registerTools(server, { getScanState, setScanState });
+registerTools(server, { getScanState, setScanState, credentialManager, blacklist });
 registerPrompts(server);
 
 const transport = new StreamableHTTPServerTransport({

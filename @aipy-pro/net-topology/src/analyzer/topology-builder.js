@@ -1,4 +1,7 @@
-export function buildTopology({ hosts, hostDetails = [], traces = [] }) {
+import { identifyDeviceRole } from "./device-role.js";
+import { detectBoundaries } from "./boundary-detector.js";
+
+export function buildTopology({ hosts, hostDetails = [], traces = [], snmpResults = {}, externalIp = null }) {
   const nodes = [];
   const edges = [];
   const subnetsSeen = new Set();
@@ -25,6 +28,16 @@ export function buildTopology({ hosts, hostDetails = [], traces = [] }) {
     };
     nodes.push(node);
     if (h.subnet) subnetsSeen.add(h.subnet);
+  }
+
+  // Classify each node's device role
+  for (const node of nodes) {
+    const hostData = hosts.find(h => h.ip === node.id) || {};
+    const snmpData = snmpResults[node.id] || null;
+    const role = identifyDeviceRole(node.id, { ...hostData, ...node }, hosts, traces, snmpData);
+    node.type = role.type;
+    node.roleConfidence = role.confidence;
+    node._roleReasons = role.reasons;
   }
 
   const gateways = nodes.filter(n => n.isGateway);
@@ -63,16 +76,24 @@ export function buildTopology({ hosts, hostDetails = [], traces = [] }) {
     if (!edgeSet.has(key)) { edgeSet.add(key); uniqueEdges.push(e); }
   }
 
+  const boundaries = detectBoundaries(nodes, uniqueEdges, Array.from(subnetsSeen), externalIp);
+
   const scanId = `scan_${Date.now()}`;
   return {
     scanId, createdAt: new Date().toISOString(),
     subnetsScanned: Array.from(subnetsSeen),
     topology: { nodes, edges: uniqueEdges },
-    boundaries: [],
+    boundaries,
     statistics: {
-      hostsFound: nodes.length, routers: gateways.length, switches: 0,
-      firewalls: 0, endpoints: endpoints.length, edgesFound: uniqueEdges.length,
-      subnetsFound: subnetsSeen.size, scanDurationMs: 0,
+      hostsFound: nodes.length,
+      routers: nodes.filter(n => n.type === "router").length,
+      switches: nodes.filter(n => n.type === "switch").length,
+      firewalls: nodes.filter(n => n.type === "firewall").length,
+      endpoints: nodes.filter(n => n.type === "endpoint").length,
+      edgesFound: uniqueEdges.length,
+      subnetsFound: subnetsSeen.size,
+      boundariesFound: boundaries.length,
+      scanDurationMs: 0,
     },
   };
 }
