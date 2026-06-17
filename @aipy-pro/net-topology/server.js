@@ -75,7 +75,8 @@ const listener = app.listen(process.env.PORT || 0, "127.0.0.1", () => {
   const port = listener.address().port;
   process.env.AIPY_PORT = String(port);
   process.env.AIPY_HOST = "127.0.0.1";
-  // Webview discovery: JSON to stdout (parsed by AiPy for embed-webview)
-  // Also serves as MCP port discovery
-  console.log(JSON.stringify({ port, type: "http_start" }));
+  // Extension startup announcement
+  console.log(`[NetTopology] embed-webview + conversation-tool`);
+  // Webview discovery: JSON parsed by AiPy for embed-webview port
+  console.log(JSON.stringify({ type: "http_start", port }));
 });
