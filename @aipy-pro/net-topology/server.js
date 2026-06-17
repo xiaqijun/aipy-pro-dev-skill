@@ -67,28 +67,18 @@ const transport = new StreamableHTTPServerTransport({
   sessionIdGenerator: undefined,
 });
 await server.connect(transport);
-// MCP Streamable HTTP — AiPy Pro client doesn't send text/event-stream Accept
-// SDK requires it, so inject before passing to transport
-function fixAcceptHeader(req) {
-  if (!req.headers["accept"]?.includes("text/event-stream")) {
-    req.headers["accept"] = (req.headers["accept"] || "*/*") + ", text/event-stream";
-  }
-}
-
+// MCP Streamable HTTP: SDK patched (webStandardStreamableHttp.js)
+// to remove text/event-stream Accept header requirement.
+// GET returns 200 manually (SDK GET uses SSE which AiPy client doesn't support).
 app.get("/mcp", (req, res) => {
-  fixAcceptHeader(req);
-  transport.handleRequest(req, res, req.body).catch(e => {
-    if (!res.headersSent) res.status(500).json({ error: e.message });
-  });
+  res.status(200).set("Mcp-Session-Id", "stateless").end();
 });
 app.post("/mcp", (req, res) => {
-  fixAcceptHeader(req);
   transport.handleRequest(req, res, req.body).catch(e => {
     if (!res.headersSent) res.status(500).json({ error: e.message });
   });
 });
 app.delete("/mcp", (req, res) => {
-  fixAcceptHeader(req);
   transport.handleRequest(req, res, req.body).catch(e => {
     if (!res.headersSent) res.status(500).json({ error: e.message });
   });
