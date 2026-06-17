@@ -63,8 +63,12 @@ app.post("/mcp", async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-const listener = app.listen(0, () => {
-  process.env.AIPY_PORT = String(listener.address().port);
+const listener = app.listen(0, "127.0.0.1", () => {
+  const port = listener.address().port;
+  process.env.AIPY_PORT = String(port);
   process.env.AIPY_HOST = "127.0.0.1";
-  console.log(`MCP server listening on port ${listener.address().port}`);
+  // MCP port discovery (text format)
+  console.log(`MCP server listening on port ${port}`);
+  // Webview port discovery (JSON format — required by AiPy embed-webview)
+  console.log(JSON.stringify({ port, type: "http_start" }));
 });
