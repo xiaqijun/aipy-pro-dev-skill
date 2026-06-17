@@ -9,11 +9,15 @@ const cy = cytoscape({
     },
     { selector: 'node[type="gateway"]', style: { "background-color": "#e8710a", width: 32, height: 32, "font-size": "11px" } },
     { selector: 'node[type="switch"]', style: { "background-color": "#1a73e8", width: 28, height: 28 } },
+    { selector: 'node[type="router"]', style: { "background-color": "#e8710a", width: 36, height: 36, "font-size": "11px", "font-weight": "bold" } },
+    { selector: 'node[type="firewall"]', style: { "background-color": "#ea4335", width: 32, height: 32, "shape": "rectangle" } },
     {
       selector: "edge",
       style: { "width": 1.5, "line-color": "#555", "target-arrow-color": "#555", "target-arrow-shape": "triangle", "curve-style": "bezier", "label": "data(label)", "font-size": "8px", "color": "#666" },
     },
     { selector: 'edge[type="l3_route"]', style: { "line-color": "#e8710a", "target-arrow-color": "#e8710a", "width": 2 } },
+    { selector: 'edge[type="vlan_boundary"]', style: { "line-color": "#fbbc04", "target-arrow-color": "#fbbc04", "line-style": "dashed", "width": 2 } },
+    { selector: 'edge[type="nat_boundary"]', style: { "line-color": "#ea4335", "target-arrow-color": "#ea4335", "line-style": "dashed", "width": 2, "arrow-scale": 1.5 } },
   ],
   layout: { name: "cose", animate: true, nodeRepulsion: () => 8000, idealEdgeLength: () => 120 },
 });
@@ -41,7 +45,7 @@ cy.on("tap", "node", (evt) => {
   const fields = [
     ["IP", data.id],
     ["MAC", data.mac || "N/A"],
-    ["类型", data.type || "unknown"],
+    ["角色", `${data.type || "unknown"} (${Math.round((data.roleConfidence || 0) * 100)}%)`],
     ["OS", data.os || "N/A"],
     ["厂商", data.vendor || "N/A"],
     ["主机名", data.hostname || "N/A"],
@@ -86,6 +90,14 @@ function renderTopology(data) {
   }
   for (const edge of data.topology.edges) {
     elements.push({ group: "edges", data: { id: `${edge.source}_${edge.target}_${edge.type}`, source: edge.source, target: edge.target, type: edge.type, label: edge.label || "", confidence: edge.confidence } });
+  }
+  for (const b of (data.boundaries || [])) {
+    if (b.type === "vlan" && b.gatewayId) {
+      const otherGw = data.topology.nodes.find(n => n.mac === b.gatewayMac && n.id !== b.gatewayId);
+      if (otherGw) {
+        elements.push({ group: "edges", data: { id: `boundary_${b.gatewayId}_${otherGw.id}`, source: b.gatewayId, target: otherGw.id, type: "vlan_boundary", label: `VLAN ${b.vlanId || ""}` } });
+      }
+    }
   }
   cy.json({ elements });
   cy.layout({ name: "cose", animate: true }).run();

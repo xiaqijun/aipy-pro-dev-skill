@@ -21,6 +21,7 @@ main { display: flex; flex: 1; overflow: hidden; }
 .legend-item { display: flex; align-items: center; gap: 4px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.router { background: #e8710a; }
+.dot.firewall { background: #ea4335; }
 .dot.switch { background: #1a73e8; }
 .dot.endpoint { background: #34a853; }
 .dot.unknown { background: #888; }
