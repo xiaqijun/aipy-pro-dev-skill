@@ -52,9 +52,6 @@ app.get("/api/latest-scan", (req, res) => {
   res.json({ scanId: scans[0].scanId });
 });
 
-app.use(express.static("public"));
-app.use("/ui", express.static("src/ui"));
-
 const server = new McpServer({
   name: "@aipy-pro/net-topology",
   version: "1.0.0",
@@ -67,22 +64,28 @@ const transport = new StreamableHTTPServerTransport({
   sessionIdGenerator: undefined,
 });
 await server.connect(transport);
-// MCP Streamable HTTP: SDK patched (webStandardStreamableHttp.js)
-// to remove text/event-stream Accept header requirement.
-// GET returns 200 manually (SDK GET uses SSE which AiPy client doesn't support).
-app.get("/mcp", (req, res) => {
-  res.status(200).set("Mcp-Session-Id", "stateless").end();
+
+// MCP at /mcp (dedicated endpoint)
+app.get("/mcp", (req, res) => res.status(200).set("Mcp-Session-Id", "stateless").end());
+app.post("/mcp", (req, res) => { transport.handleRequest(req, res, req.body).catch(e => { if (!res.headersSent) res.status(500).json({ error: e.message }); }); });
+app.delete("/mcp", (req, res) => { transport.handleRequest(req, res, req.body).catch(e => { if (!res.headersSent) res.status(500).json({ error: e.message }); }); });
+
+// MCP at root / — AiPy Pro client connects to serverUrl directly
+// Browser GET → index.html; MCP client GET (Accept: application/json) → session init
+app.get("/", (req, res, next) => {
+  const accept = (req.headers["accept"] || "").toLowerCase();
+  if (accept.includes("application/json") || accept.includes("text/event-stream")) {
+    res.status(200).set("Mcp-Session-Id", "stateless").end();
+  } else {
+    next(); // browser → serve index.html
+  }
 });
-app.post("/mcp", (req, res) => {
-  transport.handleRequest(req, res, req.body).catch(e => {
-    if (!res.headersSent) res.status(500).json({ error: e.message });
-  });
-});
-app.delete("/mcp", (req, res) => {
-  transport.handleRequest(req, res, req.body).catch(e => {
-    if (!res.headersSent) res.status(500).json({ error: e.message });
-  });
-});
+app.post("/", (req, res) => { transport.handleRequest(req, res, req.body).catch(e => { if (!res.headersSent) res.status(500).json({ error: e.message }); }); });
+app.delete("/", (req, res) => { transport.handleRequest(req, res, req.body).catch(e => { if (!res.headersSent) res.status(500).json({ error: e.message }); }); });
+
+// Static files for webview
+app.use(express.static("public"));
+app.use("/ui", express.static("src/ui"));
 
 const listener = app.listen(process.env.PORT || 0, "127.0.0.1", () => {
   const port = listener.address().port;
