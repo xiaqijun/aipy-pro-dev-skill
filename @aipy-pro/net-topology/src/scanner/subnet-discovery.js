@@ -1,1 +1,103 @@
-export async function discoverSubnets() { return []; }
+import { execSync } from "child_process";
+import os from "os";
+
+const PRIVATE_RANGES = [
+  { network: [10, 0, 0, 0], prefix: 8 },
+  { network: [172, 16, 0, 0], prefix: 12 },
+  { network: [192, 168, 0, 0], prefix: 16 },
+];
+
+function ipToInt(ip) {
+  return ip.split(".").reduce((acc, oct) => (acc << 8) + parseInt(oct), 0) >>> 0;
+}
+
+function isPrivate(ip) {
+  const int = ipToInt(ip);
+  for (const range of PRIVATE_RANGES) {
+    const netInt = range.network.reduce((a, o) => (a << 8) + o, 0) >>> 0;
+    const mask = (~0) << (32 - range.prefix);
+    if ((int & mask) === (netInt & mask)) return true;
+  }
+  return false;
+}
+
+function discoverFromRouteTable() {
+  const subnets = [];
+  try {
+    const isWindows = process.platform === "win32";
+    let output;
+    if (isWindows) {
+      output = execSync("route print", { encoding: "utf8", timeout: 5000 });
+    } else {
+      output = execSync("ip route show 2>/dev/null || route -n", { encoding: "utf8", timeout: 5000, shell: true });
+    }
+    const lines = output.split("\n");
+    for (const line of lines) {
+      const m = line.match(/(\d+\.\d+\.\d+\.\d+\/\d+)/);
+      if (m) {
+        const cidr = m[1];
+        const [ip] = cidr.split("/");
+        if (cidr.startsWith("0.0.0.0")) continue;
+        if (cidr === "127.0.0.0/8") continue;
+        if (isPrivate(ip)) {
+          const gatewayMatch = line.match(/via\s+(\d+\.\d+\.\d+\.\d+)/);
+          subnets.push({ subnet: cidr, source: "route_table", gateway: gatewayMatch ? gatewayMatch[1] : null });
+        }
+      }
+    }
+  } catch { /* route unavailable */ }
+  return subnets;
+}
+
+function discoverFromArpCache() {
+  const subnets = [];
+  try {
+    const isWindows = process.platform === "win32";
+    const output = execSync(isWindows ? "arp -a" : "arp -a -n 2>/dev/null || arp -a", {
+      encoding: "utf8", timeout: 5000, shell: true,
+    });
+    const ips = output.match(/\d+\.\d+\.\d+\.\d+/g) || [];
+    const uniqueSubnets = new Set();
+    for (const ip of ips) {
+      if (!isPrivate(ip)) continue;
+      const parts = ip.split(".").map(Number);
+      const subnet24 = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+      if (!uniqueSubnets.has(subnet24)) {
+        uniqueSubnets.add(subnet24);
+        subnets.push({ subnet: subnet24, source: "arp_cache", gateway: null });
+      }
+    }
+  } catch { /* arp unavailable */ }
+  return subnets;
+}
+
+async function discoverHeuristic() {
+  const subnets = [];
+  const templates = [];
+  for (let i = 0; i <= 10; i++) templates.push(`192.168.${i}.0/24`);
+  for (let i = 0; i <= 10; i++) templates.push(`10.0.${i}.0/24`);
+  for (let i = 0; i <= 5; i++) templates.push(`10.10.${i}.0/24`);
+  templates.push("172.16.0.0/24", "172.16.1.0/24");
+  for (const t of templates) {
+    subnets.push({ subnet: t, source: "heuristic", gateway: null });
+  }
+  return subnets;
+}
+
+export async function discoverSubnets({ includeHeuristic = true } = {}) {
+  let all = [];
+  const fromRoute = discoverFromRouteTable();
+  all = all.concat(fromRoute);
+  const fromArp = discoverFromArpCache();
+  all = all.concat(fromArp);
+  if (includeHeuristic) {
+    const fromHeuristic = await discoverHeuristic();
+    all = all.concat(fromHeuristic);
+  }
+  const seen = new Set();
+  const result = [];
+  for (const s of all) {
+    if (!seen.has(s.subnet)) { seen.add(s.subnet); result.push(s); }
+  }
+  return result;
+}
