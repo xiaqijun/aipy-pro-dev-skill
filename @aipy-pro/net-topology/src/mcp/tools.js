@@ -132,6 +132,7 @@ export function registerTools(server, { getScanState, setScanState }) {
       state.phases[1].status = "running";
       let allHosts = [];
       for (let i = 0; i < subnets.length; i++) {
+        if (state._abort) break;
         const s = subnets[i];
         const hosts = await discoverHosts(s.subnet);
         allHosts = allHosts.concat(hosts.map(h => ({ ...h, subnet: s.subnet })));
@@ -146,6 +147,7 @@ export function registerTools(server, { getScanState, setScanState }) {
       state.phases[2].status = "running";
       let hostDetails = [];
       for (let i = 0; i < scanTargets.length; i++) {
+        if (state._abort) break;
         try {
           const detail = await scanHost(scanTargets[i].ip, { portRange: "1-1000" });
           hostDetails.push(detail);
@@ -156,7 +158,15 @@ export function registerTools(server, { getScanState, setScanState }) {
 
       state.phase = "topology_build";
       state.phases[3].status = "running";
-      const topology = buildTopology({ hosts: allHosts, hostDetails, traces: [] });
+      let traces = [];
+      const gatewayIps = [...new Set(allHosts.filter(h => h.isGateway).map(h => h.ip))];
+      for (const gw of gatewayIps.slice(0, 5)) { // limit to 5 gateways
+        try {
+          const hops = await traceRoute(gw);
+          traces.push({ target: gw, hops });
+        } catch { /* skip */ }
+      }
+      const topology = buildTopology({ hosts: allHosts, hostDetails, traces });
       state.phases[3].done = 1;
       state.phases[3].status = "done";
       state.status = "done";

@@ -5,7 +5,6 @@ const DEFAULTS = {
   tcpPps: 50,
   perHostMaxPortsPerSec: 100,
   perHostMaxConcurrent: 10,
-  backoffThreshold: 0.3,
   backoffFactor: 0.5,
   maxRetries: 2,
 };
@@ -14,9 +13,6 @@ export class RateLimiter {
   constructor(opts = {}) {
     this.opts = { ...DEFAULTS, ...opts };
     this._running = 0;
-    this._queue = [];
-    this._tokens = this.opts.tcpPps;
-    this._lastRefill = Date.now();
     this._consecutiveFailures = 0;
   }
 
@@ -41,8 +37,8 @@ export class RateLimiter {
   }
 
   get throttleFactor() {
-    if (this._consecutiveFailures >= 5) return this.opts.backoffFactor;
-    if (this._consecutiveFailures >= 3) return this.opts.backoffFactor;
+    if (this._consecutiveFailures >= 5) return this.opts.backoffFactor; // 0.5
+    if (this._consecutiveFailures >= 3) return 0.75;
     return 1.0;
   }
 

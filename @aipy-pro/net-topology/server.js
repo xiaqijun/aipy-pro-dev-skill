@@ -9,7 +9,16 @@ app.use(express.json());
 
 const scanStates = new Map();
 const getScanState = (id) => scanStates.get(id);
-const setScanState = (state) => { scanStates.set(state.scanId, state); };
+const setScanState = (state) => {
+  scanStates.set(state.scanId, state);
+  // Auto-evict after 30 minutes
+  setTimeout(() => {
+    const s = scanStates.get(state.scanId);
+    if (s && (s.status === "done" || s.status === "cancelled")) {
+      scanStates.delete(state.scanId);
+    }
+  }, 30 * 60 * 1000);
+};
 
 app.get("/api/progress/:scanId", (req, res) => {
   const state = scanStates.get(req.params.scanId);
@@ -49,5 +58,7 @@ app.post("/mcp", async (req, res) => {
 });
 
 const listener = app.listen(0, () => {
+  process.env.AIPY_PORT = String(listener.address().port);
+  process.env.AIPY_HOST = "127.0.0.1";
   console.log(`MCP server listening on port ${listener.address().port}`);
 });

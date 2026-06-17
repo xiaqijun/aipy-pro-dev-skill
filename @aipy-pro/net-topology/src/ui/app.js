@@ -37,14 +37,29 @@ cy.on("tap", "node", (evt) => {
   const node = evt.target; const data = node.data();
   detailPanel.classList.remove("hidden");
   detailTitle.textContent = data.label || data.id;
-  detailContent.innerHTML =
-    `<div class="detail-row"><span class="detail-label">IP</span><span class="detail-value">${data.id}</span></div>
-    <div class="detail-row"><span class="detail-label">MAC</span><span class="detail-value">${data.mac || "N/A"}</span></div>
-    <div class="detail-row"><span class="detail-label">类型</span><span class="detail-value">${data.type || "unknown"}</span></div>
-    <div class="detail-row"><span class="detail-label">OS</span><span class="detail-value">${data.os || "N/A"}</span></div>
-    <div class="detail-row"><span class="detail-label">厂商</span><span class="detail-value">${data.vendor || "N/A"}</span></div>
-    <div class="detail-row"><span class="detail-label">主机名</span><span class="detail-value">${data.hostname || "N/A"}</span></div>
-    <div class="detail-row"><span class="detail-label">开放端口</span><span class="detail-value">${(data.ports || []).map(p => p.port + "/" + p.service).join(", ") || "N/A"}</span></div>`;
+  detailContent.innerHTML = ""; // clear — use textContent for safe data display
+  const fields = [
+    ["IP", data.id],
+    ["MAC", data.mac || "N/A"],
+    ["类型", data.type || "unknown"],
+    ["OS", data.os || "N/A"],
+    ["厂商", data.vendor || "N/A"],
+    ["主机名", data.hostname || "N/A"],
+    ["开放端口", (data.ports || []).map(p => p.port + "/" + p.service).join(", ") || "N/A"],
+  ];
+  for (const [label, value] of fields) {
+    const row = document.createElement("div");
+    row.className = "detail-row";
+    const lbl = document.createElement("span");
+    lbl.className = "detail-label";
+    lbl.textContent = label;
+    const val = document.createElement("span");
+    val.className = "detail-value";
+    val.textContent = value;
+    row.appendChild(lbl);
+    row.appendChild(val);
+    detailContent.appendChild(row);
+  }
 });
 
 cy.on("tap", (evt) => { if (evt.target === cy) detailPanel.classList.add("hidden"); });

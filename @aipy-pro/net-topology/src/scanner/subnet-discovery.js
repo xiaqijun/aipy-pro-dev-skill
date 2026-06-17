@@ -1,5 +1,4 @@
 import { execSync } from "child_process";
-import os from "os";
 
 const PRIVATE_RANGES = [
   { network: [10, 0, 0, 0], prefix: 8 },

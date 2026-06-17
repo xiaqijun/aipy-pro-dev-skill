@@ -79,5 +79,7 @@ export function buildTopology({ hosts, hostDetails = [], traces = [] }) {
 
 function guessSubnet(ip) {
   const parts = ip.split(".").map(Number);
+  if (parts[0] === 10) return `${parts[0]}.0.0.0/8`;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return `${parts[0]}.${parts[1]}.0.0/16`;
   return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
 }
