@@ -5,15 +5,12 @@ import { scanHost } from "../scanner/port-scanner.js";
 import { traceRoute } from "../scanner/traceroute.js";
 import { buildTopology } from "../analyzer/topology-builder.js";
 
-function withHostPort(host, port) {
-  const h = host.includes(":") ? `[${host}]` : host;
-  return `${h}:${port}`;
-}
+let serverPort = 0;
+
+export function setServerPort(port) { serverPort = port; }
 
 function makeTopologyUrl(scanId) {
-  const port = process.env.AIPY_PORT || "3000";
-  const host = process.env.AIPY_HOST || "localhost";
-  return `http://${withHostPort(host, port)}/ui?scanId=${scanId}`;
+  return `http://127.0.0.1:${serverPort}/?scanId=${scanId}`;
 }
 
 export function registerTools(server, { getScanState, setScanState, credentialManager, blacklist }) {

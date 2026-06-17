@@ -1,7 +1,7 @@
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { registerTools } from "./src/mcp/tools.js";
+import { registerTools, setServerPort } from "./src/mcp/tools.js";
 import { registerPrompts } from "./src/mcp/prompts.js";
 import { CredentialManager, Blacklist } from "./src/security.js";
 
@@ -73,10 +73,7 @@ app.post("/mcp", async (req, res) => {
 
 const listener = app.listen(process.env.PORT || 0, "127.0.0.1", () => {
   const port = listener.address().port;
-  process.env.AIPY_PORT = String(port);
-  process.env.AIPY_HOST = "127.0.0.1";
-  // Extension startup announcement
+  setServerPort(port);
   console.log(`[NetTopology] embed-webview + conversation-tool`);
-  // Webview discovery: JSON parsed by AiPy for embed-webview port
   console.log(JSON.stringify({ type: "http_start", port }));
 });
