@@ -67,9 +67,31 @@ const transport = new StreamableHTTPServerTransport({
   sessionIdGenerator: undefined,
 });
 await server.connect(transport);
-// MCP Streamable HTTP: handle GET (session init) + POST (messages) + DELETE (session close)
-app.all("/mcp", async (req, res) => {
-  await transport.handleRequest(req, res, req.body);
+// MCP Streamable HTTP — AiPy Pro client doesn't send text/event-stream Accept
+// SDK requires it, so inject before passing to transport
+function fixAcceptHeader(req) {
+  if (!req.headers["accept"]?.includes("text/event-stream")) {
+    req.headers["accept"] = (req.headers["accept"] || "*/*") + ", text/event-stream";
+  }
+}
+
+app.get("/mcp", (req, res) => {
+  fixAcceptHeader(req);
+  transport.handleRequest(req, res, req.body).catch(e => {
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  });
+});
+app.post("/mcp", (req, res) => {
+  fixAcceptHeader(req);
+  transport.handleRequest(req, res, req.body).catch(e => {
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  });
+});
+app.delete("/mcp", (req, res) => {
+  fixAcceptHeader(req);
+  transport.handleRequest(req, res, req.body).catch(e => {
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  });
 });
 
 const listener = app.listen(process.env.PORT || 0, "127.0.0.1", () => {
