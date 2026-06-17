@@ -8,14 +8,14 @@ Claude Code 技能，提供 AiPy Pro 智能体扩展开发的完整参考指南 
 
 ```bash
 mkdir -p ~/.claude/skills
-git clone https://github.com/YOUR_USER/aipy-pro-dev.git ~/.claude/skills/aipy-pro-dev
+git clone https://github.com/xiaqijun/aipy-pro-dev-skill.git ~/.claude/skills/aipy-pro-dev
 ```
 
 ### 方式二：项目级安装（仅当前项目可用）
 
 ```bash
 mkdir -p .claude/skills
-git clone https://github.com/YOUR_USER/aipy-pro-dev.git .claude/skills/aipy-pro-dev
+git clone https://github.com/xiaqijun/aipy-pro-dev-skill.git .claude/skills/aipy-pro-dev
 ```
 
 ### 方式三：手动复制
