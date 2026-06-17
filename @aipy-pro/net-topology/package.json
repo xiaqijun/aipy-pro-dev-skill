@@ -1,0 +1,17 @@
+{
+  "name": "@aipy-pro/net-topology",
+  "version": "1.0.0",
+  "description": "网络拓扑自动发现与可视化智能体",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test --test-reporter spec test/**/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "express": "^4.18.0",
+    "better-sqlite3": "^11.0.0",
+    "cidr-regex": "^4.0.0"
+  }
+}

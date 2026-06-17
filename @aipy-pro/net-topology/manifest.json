@@ -1,0 +1,19 @@
+{
+    "dxt_version": "0.1",
+    "name": "@aipy-pro/net-topology",
+    "display_name": "NetTopology",
+    "version": "1.0.0",
+    "description": "网络拓扑自动发现与可视化 — 主动扫描 L2/L3 拓扑",
+    "author": { "name": "AiPy Pro Developer" },
+    "icon": "icon.svg",
+    "server": {
+        "type": "node",
+        "entry_point": "server.js",
+        "mcp_config": {
+            "command": "node",
+            "args": ["${__dirname}/server.js"],
+            "env": {}
+        }
+    },
+    "keywords": ["conversation-tool"]
+}

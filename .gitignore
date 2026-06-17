@@ -1,6 +1,9 @@
 # 内部文档（不上传公开仓库）
 AiPy智能体开发实施标准.pdf
 
+# Node.js
+node_modules/
+
 # 项目记忆（本地开发参考）
 memory/
 MEMORY.md
