@@ -44,6 +44,14 @@ app.get("/api/topology/:scanId", (req, res) => {
   res.json(state.topology);
 });
 
+app.get("/api/latest-scan", (req, res) => {
+  const scans = Array.from(scanStates.values())
+    .filter(s => s.status === "done" && s.topology)
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  if (scans.length === 0) return res.status(404).json({ error: "no completed scans" });
+  res.json({ scanId: scans[0].scanId });
+});
+
 app.use(express.static("public"));
 app.use("/ui", express.static("src/ui"));
 
@@ -63,12 +71,11 @@ app.post("/mcp", async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-const listener = app.listen(0, "127.0.0.1", () => {
+const listener = app.listen(process.env.PORT || 0, "127.0.0.1", () => {
   const port = listener.address().port;
   process.env.AIPY_PORT = String(port);
   process.env.AIPY_HOST = "127.0.0.1";
-  // MCP port discovery (text format)
-  console.log(`MCP server listening on port ${port}`);
-  // Webview port discovery (JSON format — required by AiPy embed-webview)
+  // Webview discovery: JSON to stdout (parsed by AiPy for embed-webview)
+  // Also serves as MCP port discovery
   console.log(JSON.stringify({ port, type: "http_start" }));
 });

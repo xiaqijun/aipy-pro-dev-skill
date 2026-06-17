@@ -70,7 +70,25 @@ cy.on("tap", (evt) => { if (evt.target === cy) detailPanel.classList.add("hidden
 document.getElementById("btn-close-detail").addEventListener("click", () => detailPanel.classList.add("hidden"));
 
 async function loadTopology() {
-  if (!scanId) { document.getElementById("scan-status").textContent = "无扫描 ID — 请从 full_scan 启动"; return; }
+  if (!scanId) {
+    document.getElementById("scan-status").textContent = "等待扫描任务...";
+    document.getElementById("scan-stats").textContent = "在对话中执行 full_scan 后拓扑图将在此展示";
+    // Poll for latest completed scan
+    try {
+      const resp = await fetch("/api/latest-scan");
+      if (resp.ok) {
+        const { scanId: latestId } = await resp.json();
+        if (latestId) {
+          const url = new URL(location);
+          url.searchParams.set("scanId", latestId);
+          location.replace(url);
+          return;
+        }
+      }
+    } catch {}
+    setTimeout(loadTopology, 3000);
+    return;
+  }
   document.getElementById("scan-status").textContent = "加载中...";
   const poll = async () => {
     try {
